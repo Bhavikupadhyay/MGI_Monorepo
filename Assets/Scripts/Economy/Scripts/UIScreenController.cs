@@ -13,6 +13,10 @@ public class UIManager : MonoBehaviour
     [SerializeField] private GameObject topBarWallet;
     [SerializeField] private GameObject topBarEconomy;
     [SerializeField] private GameObject topBarTransactionLedger;
+    [SerializeField] private GameObject topBarModifiers; // ✅ ADD THIS
+
+    // These are optional top bar buttons (if you have buttons inside top bars)
+    [Header("Top Bar Buttons (Optional)")]
     [SerializeField] private GameObject topBarTransactionLedgerButton;
     [SerializeField] private GameObject topBarModifiersButton;
 
@@ -24,14 +28,14 @@ public class UIManager : MonoBehaviour
 
     private void Start()
     {
-        // Setup top bar buttons
+        // Optional: Setup top bar buttons (if they exist)
         if (topBarTransactionLedgerButton != null)
         {
             Button button = topBarTransactionLedgerButton.GetComponent<Button>();
             if (button != null)
                 button.onClick.AddListener(ShowTransactionLedgerPanel);
         }
-        
+
         if (topBarModifiersButton != null)
         {
             Button button = topBarModifiersButton.GetComponent<Button>();
@@ -39,8 +43,7 @@ public class UIManager : MonoBehaviour
                 button.onClick.AddListener(ShowModifiersPanel);
         }
 
-        // Changed from ShowWalletPanel() to ShowEconomyForecastPanel()
-        // This will show the Economy Forecast Panel by default when Play is pressed
+        // Default screen on Play
         ShowEconomyForecastPanel();
     }
 
@@ -48,16 +51,11 @@ public class UIManager : MonoBehaviour
     {
         HideAllPanels();
         HideAllTopBars();
-        
+
         ShowPanel(economyForecastPanel);
 
-        // Show only the Economy top bar
         if (topBarEconomy != null)
             topBarEconomy.SetActive(true);
-        if (topBarWallet != null)
-            topBarWallet.SetActive(false);
-        if (topBarTransactionLedger != null)
-            topBarTransactionLedger.SetActive(false);
 
         SetAllButtonsActive(true);
         if (economicForecastButton != null)
@@ -68,16 +66,11 @@ public class UIManager : MonoBehaviour
     {
         HideAllPanels();
         HideAllTopBars();
-        
+
         ShowPanel(transactionLedgerPanel);
 
-        // Show only the Transaction Ledger top bar
         if (topBarTransactionLedger != null)
             topBarTransactionLedger.SetActive(true);
-        if (topBarWallet != null)
-            topBarWallet.SetActive(false);
-        if (topBarEconomy != null)
-            topBarEconomy.SetActive(false);
 
         SetAllButtonsActive(true);
         if (transactionLedgerButton != null)
@@ -88,16 +81,12 @@ public class UIManager : MonoBehaviour
     {
         HideAllPanels();
         HideAllTopBars();
-        
+
         ShowPanel(modifiersPanel);
 
-        // Show only the Wallet top bar
-        if (topBarWallet != null)
-            topBarWallet.SetActive(true);
-        if (topBarEconomy != null)
-            topBarEconomy.SetActive(false);
-        if (topBarTransactionLedger != null)
-            topBarTransactionLedger.SetActive(false);
+        // ✅ Show only the Modifiers top bar (NOT wallet)
+        if (topBarModifiers != null)
+            topBarModifiers.SetActive(true);
 
         SetAllButtonsActive(true);
         if (modifiersButton != null)
@@ -108,16 +97,11 @@ public class UIManager : MonoBehaviour
     {
         HideAllPanels();
         HideAllTopBars();
-        
+
         ShowPanel(walletInfoPanel);
 
-        // Show only the Wallet top bar
         if (topBarWallet != null)
             topBarWallet.SetActive(true);
-        if (topBarEconomy != null)
-            topBarEconomy.SetActive(false);
-        if (topBarTransactionLedger != null)
-            topBarTransactionLedger.SetActive(false);
 
         SetAllButtonsActive(true);
         if (walletButton != null)
@@ -129,24 +113,21 @@ public class UIManager : MonoBehaviour
     /// </summary>
     private void HideAllTopBars()
     {
-        if (topBarWallet != null)
-            topBarWallet.SetActive(false);
-        if (topBarEconomy != null)
-            topBarEconomy.SetActive(false);
-        if (topBarTransactionLedger != null)
-            topBarTransactionLedger.SetActive(false);
+        if (topBarWallet != null) topBarWallet.SetActive(false);
+        if (topBarEconomy != null) topBarEconomy.SetActive(false);
+        if (topBarTransactionLedger != null) topBarTransactionLedger.SetActive(false);
+        if (topBarModifiers != null) topBarModifiers.SetActive(false); // ✅ ADD THIS
     }
 
+    /// <summary>
+    /// Hide ALL content panels
+    /// </summary>
     private void HideAllPanels()
     {
-        if (economyForecastPanel != null)
-            economyForecastPanel.SetActive(false);
-        if (transactionLedgerPanel != null)
-            transactionLedgerPanel.SetActive(false);
-        if (modifiersPanel != null)
-            modifiersPanel.SetActive(false);
-        if (walletInfoPanel != null)
-            walletInfoPanel.SetActive(false);
+        if (economyForecastPanel != null) economyForecastPanel.SetActive(false);
+        if (transactionLedgerPanel != null) transactionLedgerPanel.SetActive(false);
+        if (modifiersPanel != null) modifiersPanel.SetActive(false);
+        if (walletInfoPanel != null) walletInfoPanel.SetActive(false);
     }
 
     private void ShowPanel(GameObject panel)
@@ -157,13 +138,9 @@ public class UIManager : MonoBehaviour
 
     private void SetAllButtonsActive(bool state)
     {
-        if (economicForecastButton != null)
-            economicForecastButton.gameObject.SetActive(state);
-        if (transactionLedgerButton != null)
-            transactionLedgerButton.gameObject.SetActive(state);
-        if (modifiersButton != null)
-            modifiersButton.gameObject.SetActive(state);
-        if (walletButton != null)
-            walletButton.gameObject.SetActive(state);
+        if (economicForecastButton != null) economicForecastButton.gameObject.SetActive(state);
+        if (transactionLedgerButton != null) transactionLedgerButton.gameObject.SetActive(state);
+        if (modifiersButton != null) modifiersButton.gameObject.SetActive(state);
+        if (walletButton != null) walletButton.gameObject.SetActive(state);
     }
 }
