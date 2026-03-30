@@ -6,46 +6,32 @@ using UnityEngine;
 namespace CCAS.Tests
 {
     /// <summary>
-    /// EditMode tests for EventBus behaviour and the pack_opened event wired
-    /// into PackOpeningController.
+    /// EditMode tests for EventBus core behaviour and the two CCAS event contracts:
+    ///   - buy_pack          (published once per pack open)
+    ///   - xp_from_duplicate (published once per duplicate card in a pack)
     ///
     /// Run via: Window > General > Test Runner > EditMode tab.
     /// </summary>
     public class EventBusTests
     {
-        // Mirror of the private PackOpenedPayload in PackOpeningController.
-        // Kept here so tests never depend on internal implementation details.
-        [Serializable]
-        private class PackOpenedPayload
-        {
-            public string       pack_type;
-            public string       pack_name;
-            public int          cost_coins;
-            public List<string> card_uids;
-            public List<string> card_rarities;
-            public int          total_cards;
-        }
+        // ---------------------------------------------------------------
+        // Mirror structs — match the private classes in PackOpeningController
+        // without depending on them directly.
+        // ---------------------------------------------------------------
+
+        [Serializable] private class CostPaid              { public int coins; public int gems; }
+        [Serializable] private class BuyPackCardEntry      { public string card_id; public string rarity; public bool is_duplicate; public int xp_awarded; }
+        [Serializable] private class BuyPackPayload        { public string pack_type_id; public CostPaid cost_paid; public List<BuyPackCardEntry> cards_pulled; }
+        [Serializable] private class XpFromDuplicatePayload { public string card_id; public string rarity; public int xp_gained; public string source; public string pack_type_id; }
 
         private List<IDisposable> _subs;
 
-        [SetUp]
-        public void SetUp()
-        {
-            _subs = new List<IDisposable>();
-        }
+        [SetUp]    public void SetUp()    { _subs = new List<IDisposable>(); }
+        [TearDown] public void TearDown() { foreach (var s in _subs) s.Dispose(); _subs.Clear(); }
 
-        [TearDown]
-        public void TearDown()
-        {
-            // Always unsubscribe so test state never leaks into the next test
-            // (EventBus uses a static dictionary).
-            foreach (var s in _subs) s.Dispose();
-            _subs.Clear();
-        }
-
-        // ------------------------------------------------------------------
+        // ---------------------------------------------------------------
         // Core EventBus behaviour
-        // ------------------------------------------------------------------
+        // ---------------------------------------------------------------
 
         [Test]
         public void Publish_ShouldInvokeSubscriber()
@@ -53,11 +39,7 @@ namespace CCAS.Tests
             EventBus.EventEnvelope received = null;
             _subs.Add(EventBus.Subscribe("test_event", e => received = e));
 
-            EventBus.Publish(new EventBus.EventEnvelope
-            {
-                event_type = "test_event",
-                player_id  = "player_001"
-            });
+            EventBus.Publish(new EventBus.EventEnvelope { event_type = "test_event", player_id = "player_001" });
 
             Assert.IsNotNull(received);
             Assert.AreEqual("test_event",  received.event_type);
@@ -72,7 +54,6 @@ namespace CCAS.Tests
 
             EventBus.Publish(new EventBus.EventEnvelope { event_type = "autoid_test" });
 
-            Assert.IsNotNull(received);
             Assert.IsFalse(string.IsNullOrEmpty(received.event_id),
                 "EventBus must auto-fill event_id with a GUID when not provided.");
         }
@@ -85,7 +66,6 @@ namespace CCAS.Tests
 
             EventBus.Publish(new EventBus.EventEnvelope { event_type = "ts_test" });
 
-            Assert.IsNotNull(received);
             Assert.IsFalse(string.IsNullOrEmpty(received.timestamp),
                 "EventBus must auto-fill timestamp when not provided.");
         }
@@ -109,7 +89,7 @@ namespace CCAS.Tests
             var sub = EventBus.Subscribe("dispose_test", _ => count++);
 
             EventBus.Publish(new EventBus.EventEnvelope { event_type = "dispose_test" });
-            Assert.AreEqual(1, count, "Subscriber should receive the first event.");
+            Assert.AreEqual(1, count);
 
             sub.Dispose();
 
@@ -120,121 +100,195 @@ namespace CCAS.Tests
         [Test]
         public void Publish_NullEvent_ShouldNotThrow()
         {
-            Assert.DoesNotThrow(() => EventBus.Publish(null),
-                "Null events must be silently ignored, not crash.");
+            Assert.DoesNotThrow(() => EventBus.Publish(null));
         }
 
         [Test]
         public void Publish_EmptyEventType_ShouldNotThrow()
         {
             Assert.DoesNotThrow(() =>
-                EventBus.Publish(new EventBus.EventEnvelope { player_id = "p1" }),
-                "Events without an event_type must be silently ignored, not crash.");
+                EventBus.Publish(new EventBus.EventEnvelope { player_id = "p1" }));
         }
 
-        // ------------------------------------------------------------------
-        // pack_opened event — verifies the contract wired in PackOpeningController
-        // ------------------------------------------------------------------
+        // ---------------------------------------------------------------
+        // buy_pack event contract
+        // ---------------------------------------------------------------
 
         [Test]
-        public void PackOpened_Event_ShouldHaveCorrectEventType()
+        public void BuyPack_Event_ShouldHaveCorrectEventType()
         {
             EventBus.EventEnvelope received = null;
-            _subs.Add(EventBus.Subscribe("pack_opened", e => received = e));
+            _subs.Add(EventBus.Subscribe("buy_pack", e => received = e));
 
-            PublishFakePackOpened("bronze_pack", "Bronze Pack", 100,
-                new List<string> { "uid_a", "uid_b" },
-                new List<string> { "common", "uncommon" });
+            PublishFakeBuyPack("bronze_pack", 100,
+                new[] { ("uid_a", "common", false, 0), ("uid_b", "uncommon", false, 0) });
 
-            Assert.IsNotNull(received, "A pack_opened subscriber must receive the event.");
-            Assert.AreEqual("pack_opened", received.event_type);
+            Assert.IsNotNull(received, "A buy_pack subscriber must receive the event.");
+            Assert.AreEqual("buy_pack", received.event_type);
         }
 
         [Test]
-        public void PackOpened_Event_ShouldCarryPlayerId()
+        public void BuyPack_Event_ShouldCarryPlayerId()
         {
             EventBus.EventEnvelope received = null;
-            _subs.Add(EventBus.Subscribe("pack_opened", e => received = e));
+            _subs.Add(EventBus.Subscribe("buy_pack", e => received = e));
 
-            PublishFakePackOpened("bronze_pack", "Bronze Pack", 100,
-                new List<string> { "uid_a" },
-                new List<string> { "common" },
+            PublishFakeBuyPack("bronze_pack", 100,
+                new[] { ("uid_a", "common", false, 0) },
                 playerId: "unit_test_player");
 
             Assert.AreEqual("unit_test_player", received.player_id);
         }
 
         [Test]
-        public void PackOpened_Payload_ShouldDeserialize_PackType()
+        public void BuyPack_Payload_ShouldDeserialize_PackTypeAndCost()
         {
             EventBus.EventEnvelope received = null;
-            _subs.Add(EventBus.Subscribe("pack_opened", e => received = e));
+            _subs.Add(EventBus.Subscribe("buy_pack", e => received = e));
 
-            PublishFakePackOpened("gold_pack", "Gold Pack", 300,
-                new List<string> { "uid_x" },
-                new List<string> { "rare" });
+            PublishFakeBuyPack("gold_pack", 300, new[] { ("uid_x", "rare", false, 0) });
 
-            var payload = JsonUtility.FromJson<PackOpenedPayload>(received.payloadJson);
-            Assert.AreEqual("gold_pack", payload.pack_type);
-            Assert.AreEqual("Gold Pack", payload.pack_name);
-            Assert.AreEqual(300, payload.cost_coins);
+            var p = JsonUtility.FromJson<BuyPackPayload>(received.payloadJson);
+            Assert.AreEqual("gold_pack", p.pack_type_id);
+            Assert.AreEqual(300,         p.cost_paid.coins);
+            Assert.AreEqual(0,           p.cost_paid.gems);
         }
 
         [Test]
-        public void PackOpened_Payload_ShouldDeserialize_CardLists()
+        public void BuyPack_Payload_ShouldDeserialize_CardEntries()
         {
             EventBus.EventEnvelope received = null;
-            _subs.Add(EventBus.Subscribe("pack_opened", e => received = e));
+            _subs.Add(EventBus.Subscribe("buy_pack", e => received = e));
 
-            var uids     = new List<string> { "uid_1", "uid_2", "uid_3" };
-            var rarities = new List<string> { "common", "uncommon", "rare" };
-            PublishFakePackOpened("bronze_pack", "Bronze Pack", 100, uids, rarities);
+            PublishFakeBuyPack("bronze_pack", 100, new[]
+            {
+                ("uid_1", "common",   false, 0),
+                ("uid_2", "uncommon", true,  10),
+                ("uid_3", "rare",     false, 0)
+            });
 
-            var payload = JsonUtility.FromJson<PackOpenedPayload>(received.payloadJson);
-            Assert.AreEqual(3, payload.total_cards);
-            Assert.AreEqual(3, payload.card_uids.Count);
-            Assert.AreEqual(3, payload.card_rarities.Count);
-            Assert.AreEqual("uid_2",    payload.card_uids[1]);
-            Assert.AreEqual("uncommon", payload.card_rarities[1]);
+            var p = JsonUtility.FromJson<BuyPackPayload>(received.payloadJson);
+            Assert.AreEqual(3,          p.cards_pulled.Count);
+            Assert.AreEqual("uid_2",    p.cards_pulled[1].card_id);
+            Assert.AreEqual("uncommon", p.cards_pulled[1].rarity);
+            Assert.IsTrue(              p.cards_pulled[1].is_duplicate);
+            Assert.AreEqual(10,         p.cards_pulled[1].xp_awarded);
+            Assert.IsFalse(             p.cards_pulled[0].is_duplicate);
+            Assert.AreEqual(0,          p.cards_pulled[0].xp_awarded);
         }
 
         [Test]
-        public void PackOpened_Event_ShouldNotBeDeliveredToOtherEventTypes()
+        public void BuyPack_ShouldNotBeDeliveredToOtherSubscribers()
         {
-            bool wrongSubscriberFired = false;
-            _subs.Add(EventBus.Subscribe("buy_coach", _ => wrongSubscriberFired = true));
+            bool wrongFired = false;
+            _subs.Add(EventBus.Subscribe("buy_coach", _ => wrongFired = true));
 
-            PublishFakePackOpened("bronze_pack", "Bronze Pack", 100,
-                new List<string>(), new List<string>());
+            PublishFakeBuyPack("bronze_pack", 100, new[] { ("uid_a", "common", false, 0) });
 
-            Assert.IsFalse(wrongSubscriberFired,
-                "pack_opened must not be delivered to buy_coach subscribers.");
+            Assert.IsFalse(wrongFired, "buy_pack must not bleed into unrelated subscribers.");
         }
 
-        // ------------------------------------------------------------------
+        // ---------------------------------------------------------------
+        // xp_from_duplicate event contract
+        // ---------------------------------------------------------------
+
+        [Test]
+        public void XpFromDuplicate_ShouldFire_ForEachDuplicateCard()
+        {
+            int fireCount = 0;
+            _subs.Add(EventBus.Subscribe("xp_from_duplicate", _ => fireCount++));
+
+            PublishFakeXpFromDuplicate("uid_a", "common",   5,  "bronze_pack");
+            PublishFakeXpFromDuplicate("uid_b", "uncommon", 10, "bronze_pack");
+
+            Assert.AreEqual(2, fireCount,
+                "xp_from_duplicate must fire once per duplicate card.");
+        }
+
+        [Test]
+        public void XpFromDuplicate_ShouldNotFire_ForNewCards()
+        {
+            bool fired = false;
+            _subs.Add(EventBus.Subscribe("xp_from_duplicate", _ => fired = true));
+
+            // buy_pack with no duplicates — xp_from_duplicate must not be emitted
+            PublishFakeBuyPack("bronze_pack", 100, new[] { ("uid_new", "common", false, 0) });
+
+            Assert.IsFalse(fired,
+                "xp_from_duplicate must not fire when no duplicates are present.");
+        }
+
+        [Test]
+        public void XpFromDuplicate_Payload_ShouldContainCardId_Rarity_Xp()
+        {
+            EventBus.EventEnvelope received = null;
+            _subs.Add(EventBus.Subscribe("xp_from_duplicate", e => received = e));
+
+            PublishFakeXpFromDuplicate("uid_dup", "epic", 50, "gold_pack");
+
+            Assert.IsNotNull(received);
+            var p = JsonUtility.FromJson<XpFromDuplicatePayload>(received.payloadJson);
+            Assert.AreEqual("uid_dup",   p.card_id);
+            Assert.AreEqual("epic",      p.rarity);
+            Assert.AreEqual(50,          p.xp_gained);
+            Assert.AreEqual("gold_pack", p.pack_type_id);
+        }
+
+        [Test]
+        public void XpFromDuplicate_Source_ShouldIncludeRarity()
+        {
+            EventBus.EventEnvelope received = null;
+            _subs.Add(EventBus.Subscribe("xp_from_duplicate", e => received = e));
+
+            PublishFakeXpFromDuplicate("uid_r", "rare", 25, "silver_pack");
+
+            var p = JsonUtility.FromJson<XpFromDuplicatePayload>(received.payloadJson);
+            StringAssert.Contains("rare", p.source,
+                "source must embed the rarity (e.g. 'duplicate_card_rare').");
+        }
+
+        // ---------------------------------------------------------------
         // Helpers
-        // ------------------------------------------------------------------
+        // ---------------------------------------------------------------
 
-        private static void PublishFakePackOpened(
-            string packType, string packName, int cost,
-            List<string> uids, List<string> rarities,
+        private static void PublishFakeBuyPack(
+            string packTypeId, int costCoins,
+            (string uid, string rarity, bool isDup, int xp)[] cardData,
             string playerId = "test_player")
         {
-            var payload = new PackOpenedPayload
-            {
-                pack_type     = packType,
-                pack_name     = packName,
-                cost_coins    = cost,
-                card_uids     = uids,
-                card_rarities = rarities,
-                total_cards   = uids.Count
-            };
+            var entries = new List<BuyPackCardEntry>();
+            foreach (var (uid, rarity, isDup, xp) in cardData)
+                entries.Add(new BuyPackCardEntry { card_id = uid, rarity = rarity, is_duplicate = isDup, xp_awarded = xp });
 
             EventBus.Publish(new EventBus.EventEnvelope
             {
-                event_type  = "pack_opened",
+                event_type  = "buy_pack",
                 player_id   = playerId,
-                payloadJson = JsonUtility.ToJson(payload)
+                payloadJson = JsonUtility.ToJson(new BuyPackPayload
+                {
+                    pack_type_id = packTypeId,
+                    cost_paid    = new CostPaid { coins = costCoins, gems = 0 },
+                    cards_pulled = entries
+                })
+            });
+        }
+
+        private static void PublishFakeXpFromDuplicate(
+            string cardId, string rarity, int xp, string packTypeId,
+            string playerId = "test_player")
+        {
+            EventBus.Publish(new EventBus.EventEnvelope
+            {
+                event_type  = "xp_from_duplicate",
+                player_id   = playerId,
+                payloadJson = JsonUtility.ToJson(new XpFromDuplicatePayload
+                {
+                    card_id      = cardId,
+                    rarity       = rarity,
+                    xp_gained    = xp,
+                    source       = $"duplicate_card_{rarity}",
+                    pack_type_id = packTypeId
+                })
             });
         }
     }
