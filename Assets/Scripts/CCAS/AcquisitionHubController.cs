@@ -33,12 +33,8 @@ public class AcquisitionHubController : MonoBehaviour
         if (goToMarketButton != null)
             goToMarketButton.onClick.AddListener(ShowMarket);
 
-        // Disable My Packs for now
         if (myPacksButton != null)
-        {
-            myPacksButton.interactable = false;
-            myPacksButton.onClick.AddListener(ShowMyPacks); // Won’t do anything yet
-        }
+            myPacksButton.onClick.AddListener(ShowMyPacks);
 
         ShowHub();
     }
