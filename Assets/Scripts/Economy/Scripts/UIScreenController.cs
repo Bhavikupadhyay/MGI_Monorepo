@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class UIManager : MonoBehaviour
 {
@@ -83,6 +84,7 @@ public class UIManager : MonoBehaviour
         HideAllTopBars();
 
         ShowPanel(modifiersPanel);
+        RefreshModifiersPanel();
 
         // ✅ Show only the Modifiers top bar (NOT wallet)
         if (topBarModifiers != null)
@@ -142,5 +144,79 @@ public class UIManager : MonoBehaviour
         if (transactionLedgerButton != null) transactionLedgerButton.gameObject.SetActive(state);
         if (modifiersButton != null) modifiersButton.gameObject.SetActive(state);
         if (walletButton != null) walletButton.gameObject.SetActive(state);
+    }
+
+    private void RefreshModifiersPanel()
+    {
+        if (modifiersPanel == null)
+        {
+            return;
+        }
+
+        var forecastService = new EconomyForecastService();
+        if (!forecastService.TryGetSnapshot(out var snapshot))
+        {
+            Debug.LogWarning("[UIManager] Unable to refresh modifier panel because economy_forecast.json could not be read.");
+            return;
+        }
+
+        UpdateModifierRowEffect("Row_Contract", $"-{snapshot.salary:N0} Coins");
+        UpdateModifierRowEffect("Row_Facility", $"-{snapshot.operatingExpense:N0} Coins");
+        UpdateModifierRowEffect("Row_GlobalPolicy", $"{snapshot.bonus:+#;-#;0} Coins");
+    }
+
+    private void UpdateModifierRowEffect(string rowName, string effectText)
+    {
+        var row = FindChildRecursive(modifiersPanel.transform, rowName);
+        if (row == null)
+        {
+            Debug.LogWarning($"[UIManager] Could not find modifier row '{rowName}'.");
+            return;
+        }
+
+        var effectTransform = FindChildRecursive(row, "Mod_Effect");
+        if (effectTransform == null)
+        {
+            Debug.LogWarning($"[UIManager] Could not find Mod_Effect under '{rowName}'.");
+            return;
+        }
+
+        var effectLabel = effectTransform.GetComponent<TMP_Text>();
+        if (effectLabel == null)
+        {
+            effectLabel = effectTransform.GetComponentInChildren<TMP_Text>(true);
+        }
+
+        if (effectLabel == null)
+        {
+            Debug.LogWarning($"[UIManager] Modifier row '{rowName}' is missing a TMP_Text component.");
+            return;
+        }
+
+        effectLabel.text = effectText;
+    }
+
+    private static Transform FindChildRecursive(Transform root, string childName)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        foreach (Transform child in root)
+        {
+            if (child.name == childName)
+            {
+                return child;
+            }
+
+            var result = FindChildRecursive(child, childName);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
+        return null;
     }
 }

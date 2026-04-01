@@ -14,8 +14,10 @@ public class EconomyServiceJsonOperationsTester : MonoBehaviour
     [Header("Default amounts for menu actions")]
     [SerializeField] private int addCoins = 500;
     [SerializeField] private int addGems = 10;
+    [SerializeField] private int addCoachingCredits = 5;
     [SerializeField] private int spendCoins = 100;
     [SerializeField] private int spendGems = 5;
+    [SerializeField] private int spendCoachingCredits = 2;
     [SerializeField] private int recentTxLimit = 25;
 
     private EconomyService _service;
@@ -114,7 +116,7 @@ public class EconomyServiceJsonOperationsTester : MonoBehaviour
         LogHeader("EnsureWallet");
         var w = Service.GetWallet(playerId, createIfMissing: true);
         Debug.Log(w != null
-            ? $"[EconomyJsonTest] OK coins={w.coins} gems={w.gems}"
+            ? $"[EconomyJsonTest] OK coins={w.coins} gems={w.gems} coaching_credits={w.coaching_credits}"
             : "[EconomyJsonTest] Failed");
     }
 
@@ -139,6 +141,14 @@ public class EconomyServiceJsonOperationsTester : MonoBehaviour
     {
         LogHeader($"AddBoth coins+{addCoins} gems+{addGems}");
         Service.AddCurrency(playerId, addCoins, addGems, "json_test_add_both");
+        TestReadWallet();
+    }
+
+    [ContextMenu("Write: AddCurrency (coaching credits only)")]
+    public void TestAddCoachingCredits()
+    {
+        LogHeader($"AddCoachingCredits +{addCoachingCredits}");
+        Service.AddCurrency(playerId, 0, 0, addCoachingCredits, "json_test_add_coaching_credits");
         TestReadWallet();
     }
 
@@ -172,6 +182,22 @@ public class EconomyServiceJsonOperationsTester : MonoBehaviour
             : "[EconomyJsonTest] FAILED (insufficient or error)");
     }
 
+    [ContextMenu("Write: TrySpend (coaching credits only)")]
+    public void TestSpendCoachingCredits()
+    {
+        LogHeader($"TrySpend coaching credits {spendCoachingCredits}");
+        var ok = Service.TrySpend(
+            playerId,
+            0,
+            0,
+            spendCoachingCredits,
+            "json_test_spend_coaching_credits",
+            out var w);
+        Debug.Log(ok
+            ? $"[EconomyJsonTest] SUCCESS coins={w.coins} gems={w.gems} coaching_credits={w.coaching_credits}"
+            : "[EconomyJsonTest] FAILED (insufficient or error)");
+    }
+
     [ContextMenu("Write: TrySpend FAIL (huge amount, should not change JSON)")]
     public void TestSpendInsufficient()
     {
@@ -179,14 +205,18 @@ public class EconomyServiceJsonOperationsTester : MonoBehaviour
         var before = Service.GetWallet(playerId, false);
         var beforeCoins = before?.coins ?? -1;
         var beforeGems = before?.gems ?? -1;
+        var beforeCoachingCredits = before?.coaching_credits ?? -1;
 
-        var ok = Service.TrySpend(playerId, 9_999_999, 9_999_999, "json_test_should_fail", out _);
+        var ok = Service.TrySpend(playerId, 9_999_999, 9_999_999, 9_999_999, "json_test_should_fail", out _);
         Debug.Log($"[EconomyJsonTest] TrySpend returned: {ok} (expected False)");
 
         var after = Service.GetWallet(playerId, false);
         if (before != null && after != null)
         {
-            var unchanged = after.coins == beforeCoins && after.gems == beforeGems;
+            var unchanged =
+                after.coins == beforeCoins &&
+                after.gems == beforeGems &&
+                after.coaching_credits == beforeCoachingCredits;
             Debug.Log(unchanged
                 ? "[EconomyJsonTest] PASS balances unchanged"
                 : "[EconomyJsonTest] FAIL balances changed");
@@ -198,7 +228,8 @@ public class EconomyServiceJsonOperationsTester : MonoBehaviour
     {
         LogHeader("BatchSequence");
         Service.AddCurrency(playerId, 300, 20, "json_test_batch_1");
-        Service.TrySpend(playerId, 50, 5, "json_test_batch_2", out _);
+        Service.AddCurrency(playerId, 0, 0, addCoachingCredits, "json_test_batch_add_credits");
+        Service.TrySpend(playerId, 50, 5, spendCoachingCredits, "json_test_batch_2", out _);
         Service.AddCurrency(playerId, 100, 0, "json_test_batch_3");
         TestReadWallet();
         TestReadRecentTransactions();
@@ -246,6 +277,16 @@ public class EconomyServiceJsonOperationsTester : MonoBehaviour
     public void Ui_SpendCoins()
     {
         TestSpendCoins();
+    }
+
+    public void Ui_AddCredits()
+    {
+        TestAddCoachingCredits();
+    }
+
+    public void Ui_SpendCredits()
+    {
+        TestSpendCoachingCredits();
     }
 
     public void Ui_RefreshLogAll()

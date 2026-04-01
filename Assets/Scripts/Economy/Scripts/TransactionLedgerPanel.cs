@@ -33,7 +33,7 @@ public class TransactionLedgerPanel : MonoBehaviour
 
         if (loadFromEconomyServiceOnEnable)
         {
-            LoadTransactionsFromEconomyService();
+            ReloadTransactionsFromStorage();
         }
 
         if (subscribeToWalletUpdatedEvent)
@@ -201,6 +201,17 @@ public class TransactionLedgerPanel : MonoBehaviour
         return new List<Transaction>(transactions);
     }
 
+    public void ReloadTransactionsFromStorage()
+    {
+        if (economyService == null)
+        {
+            economyService = new EconomyService();
+        }
+
+        LoadTransactionsFromEconomyService();
+        RefreshTransactionList();
+    }
+
     private void LoadTransactionsFromEconomyService()
     {
         if (economyService == null)
@@ -238,7 +249,6 @@ public class TransactionLedgerPanel : MonoBehaviour
             return;
         }
 
-        LoadTransactionsFromEconomyService();
-        RefreshTransactionList();
+        ReloadTransactionsFromStorage();
     }
 }

@@ -69,34 +69,43 @@ public class EconomyServiceSmokeTestRunner : MonoBehaviour
 
         AssertCondition(walletAfterAdd != null && walletAfterAdd.coins == 1000, "Coins after AddCurrency == 1000.");
         AssertCondition(walletAfterAdd != null && walletAfterAdd.gems == 50, "Gems after AddCurrency == 50.");
+        AssertCondition(walletAfterAdd != null && walletAfterAdd.coaching_credits == 0, "Coaching credits unchanged after coin/gem AddCurrency.");
 
-        // 3) TrySpend("local_player", 200, 10, "test_spend", out var wallet)
-        var spendOk = service.TrySpend(playerId, 200, 10, "test_spend", out var walletAfterSpend);
+        // 3) AddCurrency("local_player", 0, 0, 15, "test_add_credits")
+        service.AddCurrency(playerId, 0, 0, 15, "test_add_credits");
+        var walletAfterCreditAdd = service.GetWallet(playerId);
+
+        AssertCondition(walletAfterCreditAdd != null && walletAfterCreditAdd.coaching_credits == 15, "Coaching credits after AddCurrency == 15.");
+
+        // 4) TrySpend("local_player", 200, 10, 5, "test_spend", out var wallet)
+        var spendOk = service.TrySpend(playerId, 200, 10, 5, "test_spend", out var walletAfterSpend);
         AssertCondition(spendOk, "TrySpend succeeded for affordable amount.");
         AssertCondition(walletAfterSpend != null && walletAfterSpend.coins == 800, "Coins after TrySpend == 800.");
         AssertCondition(walletAfterSpend != null && walletAfterSpend.gems == 40, "Gems after TrySpend == 40.");
+        AssertCondition(walletAfterSpend != null && walletAfterSpend.coaching_credits == 10, "Coaching credits after TrySpend == 10.");
 
-        // 4) TrySpend should fail when insufficient.
+        // 5) TrySpend should fail when insufficient.
         var beforeInsufficient = service.GetWallet(playerId);
-        var failSpendOk = service.TrySpend(playerId, 999999, 999999, "test_spend_fail", out var walletAfterFail);
+        var failSpendOk = service.TrySpend(playerId, 999999, 999999, 999999, "test_spend_fail", out var walletAfterFail);
         var afterInsufficient = service.GetWallet(playerId);
 
         AssertCondition(!failSpendOk, "TrySpend returns false for insufficient balance.");
         AssertCondition(beforeInsufficient != null && afterInsufficient != null &&
                         beforeInsufficient.coins == afterInsufficient.coins &&
-                        beforeInsufficient.gems == afterInsufficient.gems,
+                        beforeInsufficient.gems == afterInsufficient.gems &&
+                        beforeInsufficient.coaching_credits == afterInsufficient.coaching_credits,
             "Insufficient TrySpend does not mutate wallet.");
         AssertCondition(walletAfterFail != null, "Out wallet from failed TrySpend is still provided.");
 
-        // 5) GetRecentTransactions("local_player", 10)
+        // 6) GetRecentTransactions("local_player", 10)
         var recent = service.GetRecentTransactions(playerId, 10).ToList();
-        AssertCondition(recent.Count >= 4, "Recent transactions returned expected entries (>= 4).");
+        AssertCondition(recent.Count >= 6, "Recent transactions returned expected entries (>= 6).");
 
         // Validate transaction content
         ValidateTransactions(recent);
 
         // Validate event count (AddCurrency success + TrySpend success)
-        AssertCondition(_walletUpdatedEventCount >= 2, "wallet_updated event fired for AddCurrency and successful TrySpend.");
+        AssertCondition(_walletUpdatedEventCount >= 3, "wallet_updated event fired for coin/gem add, coaching credit add, and successful TrySpend.");
 
         // Additional guard: ensure failed TrySpend did not create bad transaction.
         var hasFailedSpendSource = recent.Any(t => t != null && t.source == "test_spend_fail");
@@ -115,17 +124,21 @@ public class EconomyServiceSmokeTestRunner : MonoBehaviour
         var earnTx = transactions.Where(t => t.type == "earn").ToList();
         var spendTx = transactions.Where(t => t.type == "spend").ToList();
 
-        AssertCondition(earnTx.Count >= 2, "Earn transactions exist for AddCurrency.");
-        AssertCondition(spendTx.Count >= 2, "Spend transactions exist for successful TrySpend.");
+        AssertCondition(earnTx.Count >= 3, "Earn transactions exist for AddCurrency.");
+        AssertCondition(spendTx.Count >= 3, "Spend transactions exist for successful TrySpend.");
 
         AssertCondition(earnTx.Any(t => t.currency == "coins" && t.amount == 1000 && t.source == "test_add"),
             "Earn coins transaction matches expected amount/source.");
         AssertCondition(earnTx.Any(t => t.currency == "gems" && t.amount == 50 && t.source == "test_add"),
             "Earn gems transaction matches expected amount/source.");
+        AssertCondition(earnTx.Any(t => t.currency == "coaching_credits" && t.amount == 15 && t.source == "test_add_credits"),
+            "Earn coaching credits transaction matches expected amount/source.");
         AssertCondition(spendTx.Any(t => t.currency == "coins" && t.amount == 200 && t.source == "test_spend"),
             "Spend coins transaction matches expected amount/source.");
         AssertCondition(spendTx.Any(t => t.currency == "gems" && t.amount == 10 && t.source == "test_spend"),
             "Spend gems transaction matches expected amount/source.");
+        AssertCondition(spendTx.Any(t => t.currency == "coaching_credits" && t.amount == 5 && t.source == "test_spend"),
+            "Spend coaching credits transaction matches expected amount/source.");
     }
 
     private void OnWalletUpdatedEvent(EventBus.EventEnvelope evt)

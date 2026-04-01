@@ -88,36 +88,44 @@ public class EconomyService
 
     public bool TrySpend(string playerId, int coins, int gems, string source, out Wallet updatedWallet)
     {
+        return TrySpend(playerId, coins, gems, 0, source, out updatedWallet);
+    }
+
+    public bool TrySpend(string playerId, int coins, int gems, int coachingCredits, string source, out Wallet updatedWallet)
+    {
         updatedWallet = GetWallet(playerId, true);
         if (updatedWallet == null)
         {
             return false;
         }
 
-        if (coins < 0 || gems < 0)
+        if (coins < 0 || gems < 0 || coachingCredits < 0)
         {
             Debug.LogWarning("[EconomyService] TrySpend rejected negative spend input.");
             return false;
         }
 
-        if (coins == 0 && gems == 0)
+        if (coins == 0 && gems == 0 && coachingCredits == 0)
         {
             return true;
         }
 
-        if (updatedWallet.coins < coins || updatedWallet.gems < gems)
+        if (updatedWallet.coins < coins ||
+            updatedWallet.gems < gems ||
+            updatedWallet.coaching_credits < coachingCredits)
         {
             return false;
         }
 
         updatedWallet.coins -= coins;
         updatedWallet.gems -= gems;
+        updatedWallet.coaching_credits -= coachingCredits;
         updatedWallet.last_updated = UtcNowIso();
 
         PersistWalletAndTransactions(
             playerId,
             updatedWallet,
-            BuildTransactions(playerId, coins, gems, "spend", source));
+            BuildTransactions(playerId, coins, gems, coachingCredits, "spend", source));
 
         PublishWalletUpdated(playerId, source, updatedWallet);
         return true;
@@ -125,31 +133,37 @@ public class EconomyService
 
     public void AddCurrency(string playerId, int coins, int gems, string source)
     {
+        AddCurrency(playerId, coins, gems, 0, source);
+    }
+
+    public void AddCurrency(string playerId, int coins, int gems, int coachingCredits, string source)
+    {
         var wallet = GetWallet(playerId, true);
         if (wallet == null)
         {
             return;
         }
 
-        if (coins < 0 || gems < 0)
+        if (coins < 0 || gems < 0 || coachingCredits < 0)
         {
             Debug.LogWarning("[EconomyService] AddCurrency rejected negative input.");
             return;
         }
 
-        if (coins == 0 && gems == 0)
+        if (coins == 0 && gems == 0 && coachingCredits == 0)
         {
             return;
         }
 
         wallet.coins += coins;
         wallet.gems += gems;
+        wallet.coaching_credits += coachingCredits;
         wallet.last_updated = UtcNowIso();
 
         PersistWalletAndTransactions(
             playerId,
             wallet,
-            BuildTransactions(playerId, coins, gems, "earn", source));
+            BuildTransactions(playerId, coins, gems, coachingCredits, "earn", source));
 
         PublishWalletUpdated(playerId, source, wallet);
     }
@@ -232,6 +246,7 @@ public class EconomyService
         string playerId,
         int coins,
         int gems,
+        int coachingCredits,
         string type,
         string source)
     {
@@ -261,6 +276,20 @@ public class EconomyService
                 player_id = playerId,
                 amount = gems,
                 currency = "gems",
+                type = type,
+                timestamp = timestamp,
+                source = safeSource
+            });
+        }
+
+        if (coachingCredits > 0)
+        {
+            list.Add(new WalletTransaction
+            {
+                id = Guid.NewGuid().ToString(),
+                player_id = playerId,
+                amount = coachingCredits,
+                currency = "coaching_credits",
                 type = type,
                 timestamp = timestamp,
                 source = safeSource

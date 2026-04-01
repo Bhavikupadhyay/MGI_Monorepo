@@ -107,51 +107,65 @@ public class WalletInfoPanel : MonoBehaviour
 
     public void AddCoins(int amount)
     {
-        if (economyService == null) return;
-
-        if (amount >= 0)
-        {
-            economyService.AddCurrency(playerId, amount, 0, "ui_add_coins");
-        }
-        else
-        {
-            economyService.TrySpend(playerId, Mathf.Abs(amount), 0, "ui_spend_coins", out _);
-        }
-
-        LoadWalletFromStorage();
-        UpdateWalletDisplay();
-
-        if (transactionLedgerPanel != null)
-            transactionLedgerPanel.AddTransaction(ResourceType.Coins, amount);
+        ApplyWalletDelta(amount, 0, 0, "ui_add_coins", "ui_spend_coins");
     }
 
     public void AddGems(int amount)
     {
-        if (economyService == null) return;
+        ApplyWalletDelta(0, amount, 0, "ui_add_gems", "ui_spend_gems");
+    }
 
-        if (amount >= 0)
+    public void AddCredits(int amount)
+    {
+        ApplyWalletDelta(0, 0, amount, "ui_add_coaching_credits", "ui_spend_coaching_credits");
+    }
+
+    private void ApplyWalletDelta(
+        int coinsDelta,
+        int gemsDelta,
+        int coachingCreditsDelta,
+        string earnSource,
+        string spendSource)
+    {
+        if (economyService == null)
         {
-            economyService.AddCurrency(playerId, 0, amount, "ui_add_gems");
+            return;
         }
-        else
+
+        var spendCoins = Mathf.Max(0, -coinsDelta);
+        var spendGems = Mathf.Max(0, -gemsDelta);
+        var spendCoachingCredits = Mathf.Max(0, -coachingCreditsDelta);
+        var addCoins = Mathf.Max(0, coinsDelta);
+        var addGems = Mathf.Max(0, gemsDelta);
+        var addCoachingCredits = Mathf.Max(0, coachingCreditsDelta);
+
+        var updated = true;
+        if (addCoins > 0 || addGems > 0 || addCoachingCredits > 0)
         {
-            economyService.TrySpend(playerId, 0, Mathf.Abs(amount), "ui_spend_gems", out _);
+            economyService.AddCurrency(playerId, addCoins, addGems, addCoachingCredits, earnSource);
+        }
+        else if (spendCoins > 0 || spendGems > 0 || spendCoachingCredits > 0)
+        {
+            updated = economyService.TrySpend(
+                playerId,
+                spendCoins,
+                spendGems,
+                spendCoachingCredits,
+                spendSource,
+                out _);
+        }
+
+        if (!updated)
+        {
+            Debug.LogWarning("[WalletInfoPanel] Wallet update failed due to insufficient balance or invalid input.");
+            return;
         }
 
         LoadWalletFromStorage();
         UpdateWalletDisplay();
 
         if (transactionLedgerPanel != null)
-            transactionLedgerPanel.AddTransaction(ResourceType.Gems, amount);
-    }
-
-    public void AddCredits(int amount)
-    {
-        coachingCredits += amount;
-        UpdateWalletDisplay();
-
-        if (transactionLedgerPanel != null)
-            transactionLedgerPanel.AddTransaction(ResourceType.CoachingCredits, amount);
+            transactionLedgerPanel.ReloadTransactionsFromStorage();
     }
 
     public void SetWeeklyForecast(int amount)
