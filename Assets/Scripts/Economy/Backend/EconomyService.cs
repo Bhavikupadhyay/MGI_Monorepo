@@ -53,6 +53,7 @@ public class EconomyService
         var wallet = ReadWalletForPlayer(walletPath, playerId);
         if (wallet != null)
         {
+            EnsureTransactionsFile(playerId);
             MirrorEditorDebugWallet(wallet);
             return wallet;
         }
@@ -164,6 +165,7 @@ public class EconomyService
             return Enumerable.Empty<WalletTransaction>();
         }
 
+        EnsureTransactionsFile(playerId);
         var allTransactions = LoadTransactions(playerId);
 
         return allTransactions
