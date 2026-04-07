@@ -61,8 +61,7 @@ public class LocalSeasonBackend : MonoBehaviour, ISeasonBackend
         _progressionService.ClearAllPlayerProgression();
     }
 
-    // Generate database schemas
-    GenerateDatabaseSchemas();
+    SaveProgressionDataToJson();
 }
 
     #region ISeasonBackend Implementations
@@ -211,6 +210,7 @@ public class LocalSeasonBackend : MonoBehaviour, ISeasonBackend
                 }
 
                 _progressionService?.AddXp(playerTeam.player_id, xpReward, source);
+                SaveProgressionDataToJson();
             }
 
             SaveSeasonData(currentSeason);
@@ -261,6 +261,8 @@ public class LocalSeasonBackend : MonoBehaviour, ISeasonBackend
         try
         {
             _progressionService?.AddXp(playerId, xpAmount, source);
+            SaveProgressionDataToJson();
+
             var state = _progressionService?.GetState(playerId, createIfMissing: false);
             onSuccess?.Invoke(state);
         }
@@ -330,7 +332,7 @@ public class LocalSeasonBackend : MonoBehaviour, ISeasonBackend
 
             // Award the XP
             _progressionService?.AddXp(playerTeam.player_id, xpReward, "season_reward");
-            
+            SaveProgressionDataToJson();
             Debug.Log($"[LocalSeasonBackend] Season reward awarded: {xpReward} XP for {placement} place finish");
             onSuccess?.Invoke($"Awarded {xpReward} XP for {placement} place finish");
         }
@@ -353,12 +355,12 @@ public class LocalSeasonBackend : MonoBehaviour, ISeasonBackend
             current_xp = state.current_xp,
             current_tier = state.current_tier,
             tier_progression = _progressionService?.GetAllTiers() ?? new Dictionary<string, TierData>(),
-            xp_history = new List<XPHistoryEntry>()
+            xp_history = new List<XpHistoryEntry>()
         };
 
         foreach (var entry in state.xp_history)
         {
-            legacy.xp_history.Add(new XPHistoryEntry
+            legacy.xp_history.Add(new XpHistoryEntry
             {
                 timestamp = entry.timestamp,
                 xp_gained = entry.xp_gained,
@@ -410,23 +412,25 @@ public class LocalSeasonBackend : MonoBehaviour, ISeasonBackend
         }
     }
 
-    private void GenerateDatabaseSchemas()
+    private void SaveProgressionDataToJson()
 {
     try
     {
         var dir = Path.Combine(Application.streamingAssetsPath, "Progression");
         if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
-        // Safely get all progression states as a List
-        var allStates = _progressionService?.GetAllStates()?.Values.ToList() 
-                ?? new List<PlayerProgressionState>();
+        var allStates = _progressionService?.GetAllStates()?.Values.ToList()
+                        ?? new List<PlayerProgressionState>();
 
-        // XP history file
-        var xpPath = Path.Combine(dir, "xp_history_schema.json");
+        // ---------------------------
+        // xp_history_schema.json
+        // ---------------------------
         var xpArray = new JSONArray();
 
         foreach (var state in allStates)
         {
+            if (state?.xp_history == null) continue;
+
             foreach (var entry in state.xp_history)
             {
                 var e = new JSONObject
@@ -437,18 +441,25 @@ public class LocalSeasonBackend : MonoBehaviour, ISeasonBackend
                     ["xp_gained"] = entry.xp_gained,
                     ["source"] = entry.source
                 };
+
                 xpArray.Add(e);
             }
         }
 
-        File.WriteAllText(xpPath, xpArray.ToString(2));
+        File.WriteAllText(
+            Path.Combine(dir, "xp_history_schema.json"),
+            xpArray.ToString(2)
+        );
 
-        // Progression state file
-        var progPath = Path.Combine(dir, "progression_state_schema.json");
+        // ---------------------------
+        // progression_state_schema.json
+        // ---------------------------
         var progArray = new JSONArray();
 
         foreach (var state in allStates)
         {
+            if (state == null) continue;
+
             var s = new JSONObject
             {
                 ["player_id"] = state.player_id,
@@ -457,32 +468,40 @@ public class LocalSeasonBackend : MonoBehaviour, ISeasonBackend
             };
 
             var xpArr = new JSONArray();
-            foreach (var entry in state.xp_history)
+
+            if (state.xp_history != null)
             {
-                var e = new JSONObject
+                foreach (var entry in state.xp_history)
                 {
-                    ["id"] = entry.id,
-                    ["player_id"] = entry.player_id,
-                    ["timestamp"] = entry.timestamp,
-                    ["xp_gained"] = entry.xp_gained,
-                    ["source"] = entry.source
-                };
-                xpArr.Add(e);
+                    var e = new JSONObject
+                    {
+                        ["id"] = entry.id,
+                        ["player_id"] = entry.player_id,
+                        ["timestamp"] = entry.timestamp,
+                        ["xp_gained"] = entry.xp_gained,
+                        ["source"] = entry.source
+                    };
+
+                    xpArr.Add(e);
+                }
             }
+
             s["xp_history"] = xpArr;
             progArray.Add(s);
         }
 
-        File.WriteAllText(progPath, progArray.ToString(2));
+        File.WriteAllText(
+            Path.Combine(dir, "progression_state_schema.json"),
+            progArray.ToString(2)
+        );
 
-        Debug.Log("[LocalSeasonBackend] Database schemas generated.");
+        Debug.Log("[LocalSeasonBackend] Progression data saved to JSON.");
     }
     catch (Exception ex)
     {
-        Debug.LogError($"[LocalSeasonBackend] Failed to generate database schemas: {ex}");
+        Debug.LogError($"[LocalSeasonBackend] Failed to save progression data: {ex}");
     }
 }
-
     /// <summary>
     /// Calculates the player tier based on current XP using the tier progression structure
     /// Tier progression:
