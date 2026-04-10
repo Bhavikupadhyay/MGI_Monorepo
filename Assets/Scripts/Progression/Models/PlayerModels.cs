@@ -25,6 +25,9 @@ public class XpHistoryEntry
     public string timestamp;
     public int xp_gained;
     public string source;
+
+    public XpHistoryEntry() {}
+
     
     public XpHistoryEntry(string playerId, int xpGained, string source)
     {
